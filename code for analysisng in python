@@ -1,0 +1,135 @@
+import os
+import librosa
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.stats
+import librosa.display
+import pandas as pd
+
+# Path to the folder containing the audio files
+folder_path = 'C:/Users/rw/Desktop/ffvii music/'
+output_folder = 'C:/Users/rw/Desktop/wyniki/'
+
+# Create the output folder if it does not exist
+os.makedirs(output_folder, exist_ok=True)
+
+# List to store the results
+results = []
+
+# Iterate through all files in the folder
+for filename in os.listdir(folder_path):
+    if filename.endswith('.mp3') or filename.endswith('.wav'):
+        file_path = os.path.join(folder_path, filename)
+
+        # Load the audio file
+        y, sr = librosa.load(file_path)
+
+        # Perform tempo analysis and beat tracking
+        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+
+        # Convert beat frames to time
+        beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+
+        # Calculate the onset envelope and beat strength
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr, aggregate=np.median)
+        beat_strengths = onset_env[beat_frames]
+
+        # Compute additional features
+        mean_amplitude = np.mean(y)
+        median_amplitude = np.median(y)
+        std_amplitude = np.std(y)
+        skewness_amplitude = scipy.stats.skew(y)
+        kurtosis_amplitude = scipy.stats.kurtosis(y)
+        zero_crossings = librosa.zero_crossings(y, pad=False)
+        zcr = sum(zero_crossings)
+        energy = np.sum(y ** 2) / len(y)
+        spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        rms = librosa.feature.rms(y=y)[0]
+        chroma_stft = librosa.feature.chroma_stft(y=y, sr=sr)
+
+        # Store the results in a dictionary
+        results.append({
+            'filename': filename,
+            'tempo': tempo,
+            'mean_amplitude': mean_amplitude,
+            'median_amplitude': median_amplitude,
+            'std_amplitude': std_amplitude,
+            'skewness_amplitude': skewness_amplitude,
+            'kurtosis_amplitude': kurtosis_amplitude,
+            'zcr': zcr,
+            'energy': energy,
+            'spectral_centroids': spectral_centroids.mean(),
+            'mfccs': mfccs.mean(axis=1),
+            'rms': rms.mean(),
+            'chroma_stft': chroma_stft.mean(axis=1),
+            'beat_times': beat_times,
+            'beat_strengths': beat_strengths
+        })
+
+        # Create plots for the file
+        fig, axs = plt.subplots(6, 1, figsize=(14, 30))
+
+        # Plot waveform
+        axs[0].plot(y)
+        axs[0].set_title(f'Waveform with Detected Beats - {filename}')
+        axs[0].set_xlabel('Time (s)')
+        axs[0].set_ylabel('Amplitude')
+        axs[0].vlines(beat_times, -1, 1, color='r', alpha=0.75, linestyle='--', label='Beats')
+
+        # Plot onset envelope
+        times = np.arange(len(onset_env)) / sr
+        axs[1].plot(times, onset_env, label='Onset Strength')
+        axs[1].vlines(beat_times, 0, onset_env.max(), color='r', alpha=0.75, linestyle='--', label='Beats')
+        axs[1].set_title('Onset Strength Envelope')
+        axs[1].set_xlabel('Time (s)')
+        axs[1].set_ylabel('Amplitude')
+        axs[1].legend()
+
+        # Plot beat strength
+        axs[2].plot(beat_times, beat_strengths, 'o-', label='Beat Strength')
+        axs[2].set_title('Beat Strength Over Time')
+        axs[2].set_xlabel('Time (s)')
+        axs[2].set_ylabel('Strength')
+        axs[2].legend()
+
+        # Plot MFCC
+        img = librosa.display.specshow(mfccs, sr=sr, x_axis='time', ax=axs[3])
+        fig.colorbar(img, ax=axs[3])
+        axs[3].set_title(f'MFCC - {filename}')
+
+        # Plot RMS
+        axs[4].plot(rms)
+        axs[4].set_title(f'RMS - {filename}')
+
+        # Plot Chroma Features
+        img = librosa.display.specshow(chroma_stft, y_axis='chroma', x_axis='time', ax=axs[5])
+        fig.colorbar(img, ax=axs[5])
+        axs[5].set_title(f'Chroma Features - {filename}')
+
+        # Save the plot
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_folder, f"{filename}_analysis.png"))
+        plt.close()
+
+# Create DataFrame from results
+df = pd.DataFrame(results)
+
+# Save results to CSV
+df.to_csv(os.path.join(output_folder, 'audio_analysis_results.csv'), index=False)
+
+# Print results
+for result in results:
+    print(f"Plik: {result['filename']}")
+    print(f"Srednia amplituda: {result['mean_amplitude']}")
+    print(f"Mediana amplituda: {result['median_amplitude']}")
+    print(f"Odchylenie standardowe: {result['std_amplitude']}")
+    print(f"Skosność amplitudy: {result['skewness_amplitude']}")
+    print(f"Kurtoza amplitudy: {result['kurtosis_amplitude']}")
+    print(f"Zerowa przecinka: {result['zcr']}")
+    print(f"Energy: {result['energy']}")
+    print(f"Spectral Centroid (mean): {result['spectral_centroids']}")
+    print(f"RMS (mean): {result['rms']}")
+    print(f"Chroma Features (mean): {result['chroma_stft']}")
+    print(f"MFCC (mean): {result['mfccs']}")
+    print()
